@@ -1,52 +1,72 @@
-'''
-This module contains functions for drawing 3D objects using matplotlib.
-'''
+"""
+This module contains utility functions for visualizing 3D objects and geometric primitives using Open3D and Matplotlib.
+
+Functions:
+    - draw_plane_as_lines_open3d: Visualize a plane as a grid or lines in Open3D.
+    - draw_face_of_cube: Draw a single face of a cube limited to specified bounds.
+    - draw_cube: Draw a cube by combining six faces.
+    - draw_line_extension_to_plane: Visualize a line and its intersection with a plane in 3D space.
+
+Dependencies:
+    - numpy
+    - open3d
+    - matplotlib
+    - rsaitehu.geometry (custom module for geometric calculations)
+"""
 import numpy as np
 import open3d as o3d
-from rsaitehu import geometry as geom
+import rsaitehu_geometry as geom
 import matplotlib.pyplot as plt
-# from mpl_toolkits.mplot3d import Axes3D
-
-def draw_plane_as_lines_open3d(A, B, C, D, size=10, line_color=[1, 0, 0]):
-    # Define the vertices of the plane
-    vertices = np.array([
-        [-size, -size, -(D + A * -size + B * -size) / C],
-        [size, -size, -(D + A * size + B * -size) / C],
-        [size, size, -(D + A * size + B * size) / C],
-        [-size, size, -(D + A * -size + B * size) / C]
-    ])
-
-    # Define the lines
-    lines = np.array([
-        [0, 1],
-        [1, 2],
-        [2, 3],
-        [3, 0]
-    ])
-
-    # Create the LineSet
-    lineset = o3d.geometry.LineSet()
-    lineset.points = o3d.utility.Vector3dVector(vertices)
-    lineset.lines = o3d.utility.Vector2iVector(lines)
-
-    # Set the color for each line
-    colors = [line_color for i in range(len(lines))]
-    lineset.colors = o3d.utility.Vector3dVector(colors)
-
-    return lineset
 
 def draw_plane_as_lines_open3d(A, B, C, D, size=10, line_color=[1, 0, 0], grid_density=5, external_point=None):
+    """
+    Visualize a plane as a grid of lines using Open3D.
+
+    The plane is represented by the equation Ax + By + Cz + D = 0, where (A, B, C) is
+    the normal vector to the plane. The grid of lines visualizes the plane within a
+    square area centered either on an external point projected onto the plane or
+    at the origin by default.
+
+    :param A: Coefficient A in the plane equation.
+    :type A: float
+    :param B: Coefficient B in the plane equation.
+    :type B: float
+    :param C: Coefficient C in the plane equation.
+    :type C: float
+    :param D: Coefficient D in the plane equation.
+    :type D: float
+    :param size: The extent of the grid in both x and y directions (default=10).
+    :type size: float
+    :param line_color: The RGB color of the grid lines (default=[1, 0, 0]).
+    :type line_color: List[float]
+    :param grid_density: The number of lines in each direction within the grid (default=5).
+    :type grid_density: int
+    :param external_point: A 3D point to project onto the plane and center the grid (default=None).
+    :type external_point: Optional[np.ndarray]
+    :return: An Open3D LineSet object representing the grid of lines visualizing the plane.
+    :rtype: o3d.geometry.LineSet
+
+    :raises ValueError: If C (the z-direction coefficient) is zero, making the plane undefined for visualization.
+
+    :Example:
+
+    ::
+
+        >>> import open3d as o3d
+        >>> plane_lines = draw_plane_as_lines_open3d(1, 0, -1, 0, size=5, grid_density=10)
+        >>> o3d.visualization.draw_geometries([plane_lines])
+    """
+
     vertices = []
     lines = []
     plane = np.array([A, B, C, D])
-    
-    if external_point is not None:
-        center = geom.get_point_of_plane_closest_to_given_point(plane, external_point)
-        center_x, center_y, center_z = center[0], center[1], center[2]
-    else:
-        center_x, center_y, center_z = 0, 0, 0
-    
-    # Add the corners of the grid
+
+    # Centering grid on external point or origin
+    center = (geom.get_point_of_plane_closest_to_given_point(plane, external_point)
+              if external_point is not None else np.array([0, 0, 0]))
+    center_x, center_y, center_z = center
+
+    # Generate grid vertices
     for i in np.linspace(-size, size, grid_density):
         for j in np.linspace(-size, size, grid_density):
             x = center_x + i
@@ -54,210 +74,203 @@ def draw_plane_as_lines_open3d(A, B, C, D, size=10, line_color=[1, 0, 0], grid_d
             z = -(D + A * x + B * y) / C
             vertices.append([x, y, z])
 
-    n = len(vertices)
+    # Create grid lines (horizontal and vertical)
     vertices = np.array(vertices)
-    
-    # Add the lines for the grid (horizontal and vertical)
     for i in range(grid_density):
         for j in range(grid_density - 1):
-            # horizontal lines
+            # Horizontal lines
             lines.append([i * grid_density + j, i * grid_density + j + 1])
-            # vertical lines
+            # Vertical lines
             lines.append([j * grid_density + i, (j + 1) * grid_density + i])
 
-    lines = np.array(lines)
-    
-    # Create the LineSet
+    # Create LineSet object
     lineset = o3d.geometry.LineSet()
     lineset.points = o3d.utility.Vector3dVector(vertices)
     lineset.lines = o3d.utility.Vector2iVector(lines)
-    
-    # Set the color for each line
-    colors = [line_color for _ in range(len(lines))]
-    lineset.colors = o3d.utility.Vector3dVector(colors)
+    lineset.colors = o3d.utility.Vector3dVector([line_color] * len(lines))
 
     return lineset
 
+def draw_face_of_cube(plane: np.ndarray, cube_min: np.ndarray, cube_max: np.ndarray, color: str = "red", alpha: float = 0.5, ax=None):
+    """
+    Visualize a plane face within the bounds of a cube using Matplotlib.
 
+    The function plots a plane limited to the cube's bounds. If no axis is provided, 
+    a new Matplotlib figure is created. The plane is defined by its equation 
+    Ax + By + Cz + D = 0.
 
-
-def draw_face_of_cube(plane: np.ndarray, cube_min: np.ndarray, cube_max: np.ndarray, color: str = "red", alpha: float = 0.5, ax = None):
-    '''
-    Draws a plane in 3D space using matplotlib.
-
-    :param plane: A 4x1 numpy array containing the coefficients of the plane corresponding to the face.
-    :type plane: numpy.ndarray
-    :param cube_min: A 3x1 numpy array containing the minimum x, y, and z values of the cube.
-    :type cube_min: numpy.ndarray
-    :param cube_max: A 3x1 numpy array containing the maximum x, y, and z values of the cube.
-    :type cube_max: numpy.ndarray
-    :param color: The color of the plane.
+    :param plane: A numpy array [A, B, C, D] representing the coefficients of the plane equation.
+    :type plane: np.ndarray
+    :param cube_min: A numpy array [x_min, y_min, z_min] representing the cube's minimum bounds.
+    :type cube_min: np.ndarray
+    :param cube_max: A numpy array [x_max, y_max, z_max] representing the cube's maximum bounds.
+    :type cube_max: np.ndarray
+    :param color: The color of the plane face (default="red").
     :type color: str
-    :param alpha: The transparency of the plane.
+    :param alpha: The transparency level of the plane face (default=0.5).
     :type alpha: float
-    :param ax: The matplotlib axis to draw on.
-    :type ax: matplotlib.axes.Axes3D
+    :param ax: A Matplotlib 3D axis to plot on. If None, a new figure and axis are created (default=None).
+    :type ax: Axes3D or None
     :return: None
-    :rtype: None
-    '''
-    plot_inside_function = False
-    if ax is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        plot_inside_function = True
-    # Define the plane's normal vector
-    normal = plane[:3]
-    # Create a grid of points on the plane for visualization
-    x_vals = np.linspace(cube_min[0], cube_max[0], 50)
-    y_vals = np.linspace(cube_min[1], cube_max[1], 50)
-    z_vals = np.linspace(cube_min[2], cube_max[2], 50)
-    x_grid, y_grid = np.meshgrid(x_vals, y_vals)
-    if normal[2] != 0:
-        z_grid = (-normal[0] * x_grid - normal[1] * y_grid - plane[3]) / normal[2]
-    elif normal[1] != 0:
-        x_grid, z_grid = np.meshgrid(x_vals, z_vals)
-        y_grid = (-normal[0] * x_grid - normal[2] * z_grid - plane[3]) / normal[1]
-    else:
-        y_grid, z_grid = np.meshgrid(y_vals, z_vals)
-        x_grid = (-normal[1] * y_grid - normal[2] * z_grid - plane[3]) / normal[0]
-    # Plot the plane
-    ax.plot_surface(x_grid, y_grid, z_grid, alpha=alpha, color=color)
-    if plot_inside_function:
-        # Set axis labels
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        # Show the plot
-        plt.show()
-    else:
-        return ax
 
-def draw_cube(cube_min: np.ndarray, cube_max: np.ndarray, color: str = "red", alpha: float = 0.5, ax = None):
-    '''
-    Draws a cube in 3D space using matplotlib.
-
-    :param cube_min: A 3x1 numpy array containing the minimum x, y, and z values of the cube.
-    :type cube_min: numpy.ndarray
-    :param cube_max: A 3x1 numpy array containing the maximum x, y, and z values of the cube.
-    :type cube_max: numpy.ndarray
-    :param color: The color of the cube.
-    :type color: str
-    :param alpha: The transparency of the cube.
-    :type alpha: float
-    :return: None
-    :rtype: None
+    :raises ValueError: If the plane coefficients are invalid or cannot be resolved for plotting.
 
     :Example:
 
     ::
 
-        >>> import rsaitehu.drawing as drawing
         >>> import numpy as np
-        >>> cube_min = np.array([-2, -2, -1])
-        >>> cube_max = np.array([1, 2, 2])
-        >>> drawing.draw_cube(cube_min, cube_max, color="red", alpha=0.5)
-
-    |drawing_draw_cube_example|
-
-    .. |drawing_draw_cube_example| image:: ../../doc/source/_static/images/drawing_draw_cube_example.png
-
-    '''
-    plot_inside_function = False
-    if ax is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        plot_inside_function = True
-    # Plane equations for the cube faces (front, back, top, bottom, left, right).
-    planes = [
-        (1, 0, 0, -cube_min[0]),  # Front face
-        (-1, 0, 0, cube_max[0]),  # Back face
-        (0, 1, 0, -cube_min[1]),  # Top face
-        (0, -1, 0, cube_max[1]),  # Bottom face
-        (0, 0, 1, -cube_min[2]),  # Left face
-        (0, 0, -1, cube_max[2])   # Right face
-    ]
-    # Draw the cube faces
-    for plane in planes:
-        # draw a plane limited to the cube's bounds
-        draw_face_of_cube(plane, cube_min, cube_max, color=color, alpha=alpha, ax=ax)
-    if plot_inside_function:
-        # Set axis labels
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        # Show the plot
-        plt.show()
-    else:
-        return ax
-
-def draw_line_extension_to_plane(line: np.ndarray, plane: np.ndarray, ax = None):
-    '''
-    Draws a line in 3D space, and the intersection point of the line and the plane, but this does not draw the plane.
-
-    :param line: A 2x3 numpy array containing the endpoints of the line.
-    :type line: numpy.ndarray
-    :param plane: A 4x1 numpy array containing the coefficients of the plane.
-    :type plane: numpy.ndarray
-    :return: None
-    :rtype: None
-
-    :Example:
-
-    ::
-
-        >>> import rsaitehu.geometry as geom
-        >>> import numpy as np 
-        >>> import rsaitehu.drawing as drawing
         >>> import matplotlib.pyplot as plt
-        >>> line = np.array([[0, 0, 0], [1, 1, 1]])
-        >>> plane = np.array([0, 0, 1, -3])
-        >>> intersection_point = geom.get_intersection_point_of_line_with_plane(line, plane)
-        >>> intersection_point
-        array([3., 3., 3.])
+        >>> from module import draw_face_of_cube
+        >>> plane = np.array([0, 0, 1, -3])  # Plane: z = 3
+        >>> cube_min = np.array([-2, -2, -2])
+        >>> cube_max = np.array([2, 2, 2])
         >>> fig = plt.figure()
         >>> ax = fig.add_subplot(111, projection='3d')
-        >>> drawing.draw_line_extension_to_plane(line, plane, ax)
-        >>> 
-        >>> drawing.draw_line_extension_to_plane(line, plane)
-
-    |drawing_draw_line_extension_to_plane_example|
-
-    .. |drawing_draw_line_extension_to_plane_example| image:: ../../doc/source/_static/images/drawing_draw_line_extension_to_plane_example.png
-
-    '''
-    plot_inside_function = False
-    if ax is None:
+        >>> draw_face_of_cube(plane, cube_min, cube_max, color="blue", alpha=0.5, ax=ax)
+        >>> plt.show()
+    """
+    create_plot = ax is None
+    if create_plot:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        plot_inside_function = True
-    intersection_point = geom.get_intersection_point_of_line_with_plane(line, plane)
-    # Calculate the distances from line[0] and line[1] to the intersection point
-    distance_to_line0 = np.linalg.norm(intersection_point - line[0])
-    distance_to_line1 = np.linalg.norm(intersection_point - line[1])
 
-    # Determine which point is farther away
-    farther_point_index = 0 if distance_to_line0 > distance_to_line1 else 1
-    farther_point = line[farther_point_index]
+    A, B, C, D = plane
+    x_vals = np.linspace(cube_min[0], cube_max[0], 50)
+    y_vals = np.linspace(cube_min[1], cube_max[1], 50)
+    x_grid, y_grid = np.meshgrid(x_vals, y_vals)
 
-    # Plot the remaining portion of the line from the farther point to the intersection point
-    intersection_x = intersection_point[0]
-    intersection_y = intersection_point[1]
-    intersection_z = intersection_point[2]
-    farther_x = farther_point[0]
-    farther_y = farther_point[1]
-    farther_z = farther_point[2]
-    ax.plot([farther_x, intersection_x], [farther_y, intersection_y], [farther_z, intersection_z], linestyle='--', color='blue')
+    if C != 0:
+        z_grid = (-A * x_grid - B * y_grid - D) / C
+    elif B != 0:
+        y_grid, z_grid = np.meshgrid(y_vals, np.linspace(cube_min[2], cube_max[2], 50))
+        x_grid = (-B * y_grid - C * z_grid - D) / A
+    else:
+        x_grid, z_grid = np.meshgrid(x_vals, np.linspace(cube_min[2], cube_max[2], 50))
+        y_grid = (-A * x_grid - C * z_grid - D) / B
 
-    # Plot the intersection point
-    ax.scatter(intersection_point[0], intersection_point[1], intersection_point[2], c='green', label='Intersection Point', s=100)
+    ax.plot_surface(x_grid, y_grid, z_grid, color=color, alpha=alpha)
 
-    if plot_inside_function:
-        # Set axis labels
+    if create_plot:
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        # Show the plot
         plt.show()
-    else:
-        return ax
+
+def draw_cube(cube_min: np.ndarray, cube_max: np.ndarray, color: str = "red", alpha: float = 0.5, ax=None):
+    """
+    Visualize a cube in 3D space using Matplotlib by combining its six faces.
+
+    The cube is defined by its minimum and maximum corner points. Each face is drawn
+    using the `draw_face_of_cube` function. If no axis is provided, a new Matplotlib
+    figure is created.
+
+    :param cube_min: A numpy array [x_min, y_min, z_min] representing the cube's minimum bounds.
+    :type cube_min: np.ndarray
+    :param cube_max: A numpy array [x_max, y_max, z_max] representing the cube's maximum bounds.
+    :type cube_max: np.ndarray
+    :param color: The color of the cube's faces (default="red").
+    :type color: str
+    :param alpha: The transparency level of the cube's faces (default=0.5).
+    :type alpha: float
+    :param ax: A Matplotlib 3D axis to plot on. If None, a new figure and axis are created (default=None).
+    :type ax: Axes3D or None
+    :return: None
+
+    :raises ValueError: If cube_min or cube_max are not valid 3D coordinates.
+
+    :Example:
+
+    ::
+
+        >>> import numpy as np
+        >>> import matplotlib.pyplot as plt
+        >>> from module import draw_cube
+        >>> cube_min = np.array([-1, -1, -1])
+        >>> cube_max = np.array([1, 1, 1])
+        >>> fig = plt.figure()
+        >>> ax = fig.add_subplot(111, projection='3d')
+        >>> draw_cube(cube_min, cube_max, color="green", alpha=0.7, ax=ax)
+        >>> plt.show()
+    """
+    create_plot = ax is None
+    if create_plot:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+    planes = [
+        [1, 0, 0, -cube_min[0]],   # Front face
+        [-1, 0, 0, cube_max[0]],   # Back face
+        [0, 1, 0, -cube_min[1]],   # Top face
+        [0, -1, 0, cube_max[1]],   # Bottom face
+        [0, 0, 1, -cube_min[2]],   # Left face
+        [0, 0, -1, cube_max[2]]    # Right face
+    ]
+
+    for plane in planes:
+        draw_face_of_cube(plane, cube_min, cube_max, color=color, alpha=alpha, ax=ax)
+
+    if create_plot:
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        plt.show()
+
+def draw_line_extension_to_plane(line: np.ndarray, plane: np.ndarray, ax=None):
+    """
+    Visualize a line and its intersection with a plane in 3D space using Matplotlib.
+
+    The function plots a line segment in 3D and highlights its intersection with a plane
+    defined by the equation Ax + By + Cz + D = 0. If no axis is provided, a new Matplotlib
+    figure is created.
+
+    :param line: A numpy array of shape (2, 3) representing two endpoints of the line.
+    :type line: np.ndarray
+    :param plane: A numpy array [A, B, C, D] representing the coefficients of the plane equation.
+    :type plane: np.ndarray
+    :param ax: A Matplotlib 3D axis to plot on. If None, a new figure and axis are created (default=None).
+    :type ax: Axes3D or None
+    :return: None
+
+    :raises ValueError: If the line or plane input dimensions are incorrect or if the intersection cannot be computed.
+
+    :Example:
+
+    ::
+
+        >>> import numpy as np
+        >>> import matplotlib.pyplot as plt
+        >>> from module import draw_line_extension_to_plane
+        >>> line = np.array([[0, 0, 0], [1, 1, 1]])  # Line segment
+        >>> plane = np.array([0, 0, 1, -3])  # Plane: z = 3
+        >>> fig = plt.figure()
+        >>> ax = fig.add_subplot(111, projection='3d')
+        >>> draw_line_extension_to_plane(line, plane, ax=ax)
+        >>> plt.show()
+    """
+    create_plot = ax is None
+    if create_plot:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+    # Compute the intersection point of the line and plane
+    intersection = geom.get_intersection_point_of_line_with_plane(line, plane)
+
+    if intersection is None:
+        raise ValueError("The line does not intersect the plane.")
+
+    # Plot the line segment
+    ax.plot(*zip(*line), linestyle='-', color='blue', label='Line')
+
+    # Highlight the intersection point
+    ax.scatter(*intersection, color='green', label='Intersection', s=100)
+
+    if create_plot:
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.legend()
+        plt.show()
+
+
 
