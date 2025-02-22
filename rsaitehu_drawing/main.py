@@ -136,18 +136,29 @@ def draw_face_of_cube(plane: np.ndarray, cube_min: np.ndarray, cube_max: np.ndar
         ax = fig.add_subplot(111, projection='3d')
 
     A, B, C, D = plane
-    x_vals = np.linspace(cube_min[0], cube_max[0], 50)
-    y_vals = np.linspace(cube_min[1], cube_max[1], 50)
-    x_grid, y_grid = np.meshgrid(x_vals, y_vals)
+    tol = 1e-6  # tolerance to avoid floating-point issues
 
-    if C != 0:
+    # Choose independent variables based on which coefficient is safely nonzero.
+    if abs(C) > tol:
+        # Use x and y as independent variables, solve for z.
+        x_vals = np.linspace(cube_min[0], cube_max[0], 50)
+        y_vals = np.linspace(cube_min[1], cube_max[1], 50)
+        x_grid, y_grid = np.meshgrid(x_vals, y_vals)
         z_grid = (-A * x_grid - B * y_grid - D) / C
-    elif B != 0:
-        y_grid, z_grid = np.meshgrid(y_vals, np.linspace(cube_min[2], cube_max[2], 50))
+    elif abs(A) > tol:
+        # Use y and z as independent variables, solve for x.
+        y_vals = np.linspace(cube_min[1], cube_max[1], 50)
+        z_vals = np.linspace(cube_min[2], cube_max[2], 50)
+        y_grid, z_grid = np.meshgrid(y_vals, z_vals)
         x_grid = (-B * y_grid - C * z_grid - D) / A
-    else:
-        x_grid, z_grid = np.meshgrid(x_vals, np.linspace(cube_min[2], cube_max[2], 50))
+    elif abs(B) > tol:
+        # Use x and z as independent variables, solve for y.
+        x_vals = np.linspace(cube_min[0], cube_max[0], 50)
+        z_vals = np.linspace(cube_min[2], cube_max[2], 50)
+        x_grid, z_grid = np.meshgrid(x_vals, z_vals)
         y_grid = (-A * x_grid - C * z_grid - D) / B
+    else:
+        raise ValueError("Invalid plane: all coefficients are nearly zero.")
 
     ax.plot_surface(x_grid, y_grid, z_grid, color=color, alpha=alpha)
 
